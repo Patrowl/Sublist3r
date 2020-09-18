@@ -331,6 +331,7 @@ class YahooEnum(enumratorBaseThreaded):
         self.MAX_DOMAINS = 10
         self.MAX_PAGES = 0
         super(YahooEnum, self).__init__(base_url, self.engine_name, domain, subdomains, q=q, silent=silent, verbose=verbose)
+        del self.headers['Accept']
         self.q = q
         return
 
@@ -377,7 +378,7 @@ class YahooEnum(enumratorBaseThreaded):
 class AskEnum(enumratorBaseThreaded):
     def __init__(self, domain, subdomains=None, q=None, silent=False, verbose=True):
         subdomains = subdomains or []
-        base_url = 'http://www.ask.com/web?q={query}&page={page_no}&qid=8D6EE6BF52E0C04527E51F64F22C4534&o=0&l=dir&qsrc=998&qo=pagination'
+        base_url = 'https://www.ask.com/web?q={query}&page={page_no}&qid=8D6EE6BF52E0C04527E51F64F22C4534&o=0&l=dir&qsrc=998&qo=pagination'
         self.engine_name = "Ask"
         self.MAX_DOMAINS = 11
         self.MAX_PAGES = 0
@@ -387,7 +388,7 @@ class AskEnum(enumratorBaseThreaded):
 
     def extract_domains(self, resp):
         links_list = list()
-        link_regx = re.compile('<p class="web-result-url">(.*?)</p>')
+        link_regx = re.compile('<p class="PartialSearchResults-item-url">(.*?)</p>')
         try:
             links_list = link_regx.findall(resp)
             for link in links_list:
@@ -862,6 +863,46 @@ class PassiveDNS(enumratorBaseThreaded):
             pass
 
 
+class HackerTarget(enumratorBaseThreaded):
+    def __init__(self, domain, subdomains=None, q=None, silent=False, verbose=True):
+        subdomains = subdomains or []
+        base_url = 'https://api.hackertarget.com/hostsearch/?q={domain}'
+        self.engine_name = "HackerTarget"
+        # self.lock = threading.Lock()
+        self.q = q
+        super(HackerTarget, self).__init__(base_url, self.engine_name, domain, subdomains, q=q, silent=silent, verbose=verbose)
+        return
+
+    def req(self, url):
+        try:
+            resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
+        except Exception:
+            resp = None
+
+        # return get_response(resp)
+        return self.get_response(resp)
+
+    def enumerate(self):
+        url = self.base_url.format(domain=self.domain)
+        resp = self.req(url)
+        if not resp:
+            return self.subdomains
+
+        self.extract_domains(resp)
+        return self.subdomains
+
+    def extract_domains(self, resp):
+        try:
+            for subdomain in resp.split('\n'):
+                subdomain = subdomain.split(',')[0]
+                if subdomain not in self.subdomains and subdomain != self.domain:
+                    if self.verbose:
+                        self.print_("%s%s: %s%s" % (R, self.engine_name, W, subdomain))
+                    self.subdomains.append(subdomain.strip())
+        except Exception:
+            pass
+
+
 class portscan():
     def __init__(self, subdomains, ports):
         self.subdomains = subdomains
@@ -933,7 +974,8 @@ def main(domain, threads, savefile, ports, silent, verbose, enable_bruteforce, e
                          'virustotal': Virustotal,
                          'threatcrowd': ThreatCrowd,
                          'ssl': CrtSearch,
-                         'passivedns': PassiveDNS
+                         'passivedns': PassiveDNS,
+                         'hackertarget': HackerTarget
                          }
 
     chosenEnums = []
@@ -942,7 +984,8 @@ def main(domain, threads, savefile, ports, silent, verbose, enable_bruteforce, e
         chosenEnums = [
             BaiduEnum, YahooEnum, GoogleEnum, BingEnum, AskEnum,
             NetcraftEnum, DNSdumpster, Virustotal, ThreatCrowd,
-            CrtSearch, PassiveDNS
+            CrtSearch, PassiveDNS,
+            HackerTarget
         ]
     else:
         engines = engines.split(',')
