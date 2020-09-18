@@ -2,6 +2,7 @@
 # coding: utf-8
 # Sublist3r v1.0
 # By Ahmed Aboul-Ela - twitter.com/aboul3la
+# Updated by Nicolas Mattiocco <nicolas@patrowl.io>
 
 # modules in standard library
 import re
@@ -22,7 +23,7 @@ from subbrute import subbrute
 import dns.resolver
 import requests
 
-# Python 2.x and 3.x compatiablity
+# Python 2.x and 3.x compatibility
 if sys.version > '3':
     import urllib.parse as urlparse
     import urllib.parse as urllib
@@ -35,7 +36,7 @@ else:
 try:
     import requests.packages.urllib3
     requests.packages.urllib3.disable_warnings()
-except:
+except Exception:
     pass
 
 # Check if we are running this on windows platform
@@ -50,14 +51,14 @@ if is_windows:
     R = '\033[91m'  # red
     W = '\033[0m'   # white
     try:
-        import win_unicode_console , colorama
+        import win_unicode_console
+        import colorama
         win_unicode_console.enable()
         colorama.init()
-        #Now the unicode will work ^_^
-    except:
+        # Now the unicode will work ^_^
+    except Exception:
         print("[!] Error: Coloring libraries not installed, no coloring will be used [Check the readme]")
         G = Y = B = R = W = G = Y = B = R = W = ''
-
 
 else:
     G = '\033[92m'  # green
@@ -65,6 +66,7 @@ else:
     B = '\033[94m'  # blue
     R = '\033[91m'  # red
     W = '\033[0m'   # white
+
 
 def no_color():
     global G, Y, B, R, W
@@ -195,12 +197,12 @@ class enumratorBase(object):
 
     # override
     def extract_domains(self, resp):
-        """ chlid class should override this function """
+        """ child class should override this function """
         return
 
     # override
     def check_response_errors(self, resp):
-        """ chlid class should override this function
+        """ child class should override this function
         The function should return True if there are no errors and False otherwise
         """
         return True
@@ -210,11 +212,11 @@ class enumratorBase(object):
         return
 
     def generate_query(self):
-        """ chlid class should override this function """
+        """ child class should override this function """
         return
 
     def get_page(self, num):
-        """ chlid class that user different pagnation counter should override this function """
+        """ child class that user different pagnation counter should override this function """
         return num + 10
 
     def enumerate(self, altquery=False):
@@ -236,7 +238,7 @@ class enumratorBase(object):
                 return self.subdomains
             resp = self.send_req(query, page_no)
 
-            # check if there is any error occured
+            # check if there is any error occurred
             if not self.check_response_errors(resp):
                 return self.subdomains
             links = self.extract_domains(resp)
@@ -266,8 +268,9 @@ class enumratorBaseThreaded(multiprocessing.Process, enumratorBase):
 
     def run(self):
         domain_list = self.enumerate()
-        for domain in domain_list:
-            self.q.append(domain)
+        if domain_list is not None:
+            for domain in domain_list:
+                self.q.append(domain)
 
 
 class GoogleEnum(enumratorBaseThreaded):
@@ -565,16 +568,16 @@ class NetcraftEnum(enumratorBaseThreaded):
     def enumerate(self):
         start_url = self.base_url.format(domain='example.com')
         resp = self.req(start_url)
-        cookies = self.get_cookies(resp.headers)
-        url = self.base_url.format(domain=self.domain)
-        while True:
-            resp = self.get_response(self.req(url, cookies))
-            self.extract_domains(resp)
-            if 'Next Page' not in resp:
-                return self.subdomains
-                break
-            url = self.get_next(resp)
-            self.should_sleep()
+        if 'headers' in dir(resp):
+            cookies = self.get_cookies(resp.headers)
+            url = self.base_url.format(domain=self.domain)
+            while True:
+                resp = self.get_response(self.req(url, cookies))
+                self.extract_domains(resp)
+                if 'Next Page' not in resp:
+                    return self.subdomains
+                url = self.get_next(resp)
+                self.should_sleep()
 
     def extract_domains(self, resp):
         links_list = list()
@@ -611,13 +614,14 @@ class DNSdumpster(enumratorBaseThreaded):
         Resolver.nameservers = ['8.8.8.8', '8.8.4.4']
         self.lock.acquire()
         try:
-            ip = Resolver.query(host, 'A')[0].to_text()
+            # ip = Resolver.query(host, 'A')[0].to_text()
+            ip = dns.resolver.Resolver.resolve()
             if ip:
                 if self.verbose:
                     self.print_("%s%s: %s%s" % (R, self.engine_name, W, host))
                 is_valid = True
                 self.live_subdomains.append(host)
-        except:
+        except Exception:
             pass
         self.lock.release()
         return is_valid
@@ -625,7 +629,7 @@ class DNSdumpster(enumratorBaseThreaded):
     def req(self, req_method, url, params=None):
         params = params or {}
         headers = dict(self.headers)
-        headers['Referer'] = 'https://dnsdumpster.com'
+        headers['Referrer'] = 'https://dnsdumpster.com'
         try:
             if req_method == 'GET':
                 resp = self.session.get(url, headers=headers, timeout=self.timeout)
@@ -644,14 +648,15 @@ class DNSdumpster(enumratorBaseThreaded):
     def enumerate(self):
         self.lock = threading.BoundedSemaphore(value=70)
         resp = self.req('GET', self.base_url)
-        token = self.get_csrftoken(resp)
-        params = {'csrfmiddlewaretoken': token, 'targetip': self.domain}
-        post_resp = self.req('POST', self.base_url, params)
-        self.extract_domains(post_resp)
-        for subdomain in self.subdomains:
-            t = threading.Thread(target=self.check_host, args=(subdomain,))
-            t.start()
-            t.join()
+        if isinstance(resp, str):
+            token = self.get_csrftoken(resp)
+            params = {'csrfmiddlewaretoken': token, 'targetip': self.domain}
+            post_resp = self.req('POST', self.base_url, params)
+            self.extract_domains(post_resp)
+            for subdomain in self.subdomains:
+                t = threading.Thread(target=self.check_host, args=(subdomain,))
+                t.start()
+                t.join()
         return self.live_subdomains
 
     def extract_domains(self, resp):
@@ -697,7 +702,11 @@ class Virustotal(enumratorBaseThreaded):
     def enumerate(self):
         while self.url != '':
             resp = self.send_req(self.url)
-            resp = json.loads(resp)
+            try:
+                resp = json.loads(resp)
+            except Exception:
+                self.print_(R + "[!] Error: Virustotal returns 'int' values" + W)
+                break
             if 'error' in resp:
                 self.print_(R + "[!] Error: Virustotal probably now is blocking our requests" + W)
                 break
@@ -709,7 +718,7 @@ class Virustotal(enumratorBaseThreaded):
         return self.subdomains
 
     def extract_domains(self, resp):
-        #resp is already parsed as json
+        # resp is already parsed as json
         try:
             for i in resp['data']:
                 if i['type'] == 'domain':
@@ -765,7 +774,8 @@ class ThreatCrowd(enumratorBaseThreaded):
 class CrtSearch(enumratorBaseThreaded):
     def __init__(self, domain, subdomains=None, q=None, silent=False, verbose=True):
         subdomains = subdomains or []
-        base_url = 'https://crt.sh/?q=%25.{domain}'
+        # base_url = 'https://crt.sh/?q=%25.{domain}'
+        base_url = 'https://crt.sh/?q=.{domain}'
         self.engine_name = "SSL Certificates"
         self.q = q
         super(CrtSearch, self).__init__(base_url, self.engine_name, domain, subdomains, q=q, silent=silent, verbose=verbose)
@@ -813,6 +823,7 @@ class CrtSearch(enumratorBaseThreaded):
             print(e)
             pass
 
+
 class PassiveDNS(enumratorBaseThreaded):
     def __init__(self, domain, subdomains=None, q=None, silent=False, verbose=True):
         subdomains = subdomains or []
@@ -825,7 +836,7 @@ class PassiveDNS(enumratorBaseThreaded):
     def req(self, url):
         try:
             resp = self.session.get(url, headers=self.headers, timeout=self.timeout)
-        except Exception as e:
+        except Exception:
             resp = None
 
         return self.get_response(resp)
@@ -847,7 +858,7 @@ class PassiveDNS(enumratorBaseThreaded):
                     if self.verbose:
                         self.print_("%s%s: %s%s" % (R, self.engine_name, W, subdomain))
                     self.subdomains.append(subdomain.strip())
-        except Exception as e:
+        except Exception:
             pass
 
 
@@ -1000,7 +1011,8 @@ def interactive():
     if args.no_color:
         no_color()
     banner()
-    res = main(domain, threads, savefile, ports, silent=False, verbose=verbose, enable_bruteforce=enable_bruteforce, engines=engines)
+    main(domain, threads, savefile, ports, silent=False, verbose=verbose, enable_bruteforce=enable_bruteforce, engines=engines)
+
 
 if __name__ == "__main__":
     interactive()
