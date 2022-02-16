@@ -669,6 +669,8 @@ class DNSdumpster(enumratorBaseThreaded):
             results_tbl = tbl_regex.findall(resp)[0]
         except IndexError:
             results_tbl = ''
+        except TypeError:
+            results_tbl = ''
         links_list = link_regex.findall(results_tbl)
         links = list(set(links_list))
         for link in links:
