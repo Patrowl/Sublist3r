@@ -12,7 +12,7 @@ import argparse
 import time
 import hashlib
 import random
-import multiprocessing
+import billiard as multiprocessing
 import threading
 import socket
 import json
@@ -645,7 +645,9 @@ class DNSdumpster(enumratorBaseThreaded):
     def get_csrftoken(self, resp):
         csrf_regex = re.compile('<input type="hidden" name="csrfmiddlewaretoken" value="(.*?)">', re.S)
         token = csrf_regex.findall(resp)[0]
-        return token.strip()
+        if len(token) == 0:
+            return None
+        return token[0].strip()
 
     def enumerate(self):
         self.lock = threading.BoundedSemaphore(value=70)
