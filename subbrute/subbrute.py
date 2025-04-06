@@ -26,8 +26,7 @@ try:
 except:
     import Queue
 
-#The 'multiprocessing' library does not rely upon a Global Interpreter Lock (GIL)
-import multiprocessing
+import billiard as multiprocessing
 
 #Microsoft compatiablity
 if  sys.platform.startswith('win'):
